@@ -23,3 +23,21 @@ Raft中Leader强制让别的follower都和自己一样，所以如果有冲突�
 Leader为每个follower保存nextIndex，表示下一个要发送给这个follower的entry的index。最一开始每个nextIndex都是leader的log中最后index+1，如果收到拒绝，则将nextIndex-1并重新发送appendentries，重复这个过程直到follower同意。通过这种方式将follower中少的或者与自己不一致的entry全部统一了。
 
 体现了**Leader永远不会修改或者删除自己的log，只会append自己的log。（Leader Append-Only）**
+
+## Safety
+
+### 要保证的特性
+
+1. 所有commit的entry，都要出现在每一个leader中。也就是说，要成为一个leader，它的log中就必须有之前所有的commit的entry。通过leader election的限制来实现这个特性。
+
+### Leader Election Restriction
+
+请求投票时，candidate会将自己log的信息包含在rpc中，candidate只有比majority的log都更up-to-date才能成为leader。
+
+**如何判断up-to-date**：requestVote rpc中，包含log最后一个entry的index和term，优先比较term，term大的就更up-to-date。如果term相同，就比较index（即日志的长度）
+
+**为什么这样能保证每个commit的entry都在leader中**：因为每个commit的entry都至少在majority中复制成功了，而新leader又比majority的log更新，这两个majority必定会有重合的（至少一个），所以leader一定有commit的entry。
+
+### Committing Entries from previous term
+
+每个leader只提交自己当前term的entries，不管之前term的。一旦提交了一个，之前的entries也都间接提交了。**为什么？**
